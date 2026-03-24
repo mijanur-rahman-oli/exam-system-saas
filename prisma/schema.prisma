@@ -1,0 +1,280 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  super_admin
+  admin
+  question_setter
+  student
+}
+
+enum Difficulty {
+  easy
+  medium
+  hard
+}
+
+enum QuestionStatus {
+  draft
+  published
+}
+
+// ─── Tenant (Coaching Center) ─────────────────────────────────────────────────
+
+model Tenant {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  slug      String   @unique
+  logoUrl   String?  @map("logo_url")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users    User[]
+  courses  Course[]
+  exams    Exam[]
+
+  @@map("tenants")
+}
+
+// ─── Course ───────────────────────────────────────────────────────────────────
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exams       Exam[]
+  enrollments CourseEnrollment[]
+
+  @@unique([tenantId, name])
+  @@map("courses")
+}
+
+// ─── Course Enrollment ────────────────────────────────────────────────────────
+
+model CourseEnrollment {
+  id         Int      @id @default(autoincrement())
+  courseId   Int      @map("course_id")
+  studentId  Int      @map("student_id")
+  enrolledAt DateTime @default(now()) @map("enrolled_at")
+
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, studentId])
+  @@map("course_enrollments")
+}
+
+// ─── Tag ──────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  questions QuestionTag[]
+
+  @@map("tags")
+}
+
+model QuestionTag {
+  questionId Int @map("question_id")
+  tagId      Int @map("tag_id")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+  @@map("question_tags")
+}
+
+// ─── Users & Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int?     @map("tenant_id")
+  username   String   @unique
+  email      String   @unique
+  password   String
+  role       Role     @default(student)
+  phone      String?
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant                  Tenant?                  @relation(fields: [tenantId], references: [id])
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  examAttempts            ExamAttempt[]
+  createdExams            Exam[]                   @relation("ExamCreator")
+  createdQuestions        Question[]               @relation("QuestionCreator")
+  enrollments             CourseEnrollment[]
+
+  @@map("users")
+}
+
+model EmailVerificationToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique
+  expires   DateTime @map("token_expires")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique
+  expires   DateTime @map("token_expires")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// ─── Subject (Master Library grouping — tenant-scoped) ────────────────────────
+
+model Subject {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  questions Question[]
+  exams     Exam[]
+
+  @@map("subjects")
+}
+
+// ─── Questions (Master Library) ───────────────────────────────────────────────
+
+model Question {
+  id        Int            @id @default(autoincrement())
+  subjectId Int            @map("subject_id")
+  status    QuestionStatus @default(draft)
+
+  question      String  @db.Text
+  questionImage String? @map("question_image")
+
+  optionA String  @map("option_a")
+  optionB String  @map("option_b")
+  optionC String? @map("option_c")
+  optionD String? @map("option_d")
+
+  optionAImage String? @map("option_a_image")
+  optionBImage String? @map("option_b_image")
+  optionCImage String? @map("option_c_image")
+  optionDImage String? @map("option_d_image")
+
+  correctAnswer    String  @map("correct_answer")
+  isMultipleAnswer Boolean @default(false) @map("is_multiple_answer")
+  explanation      String? @db.Text
+  solutionImage    String? @map("solution_image")
+
+  marks      Int        @default(1)
+  difficulty Difficulty @default(medium)
+
+  createdBy Int      @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subject       Subject       @relation(fields: [subjectId], references: [id])
+  creator       User          @relation("QuestionCreator", fields: [createdBy], references: [id])
+  tags          QuestionTag[]
+  examQuestions ExamQuestion[]
+  examAnswers   ExamAnswer[]
+
+  @@map("questions")
+}
+
+// ─── Exams ────────────────────────────────────────────────────────────────────
+
+model Exam {
+  id            Int       @id @default(autoincrement())
+  tenantId      Int       @map("tenant_id")
+  courseId      Int       @map("course_id")
+  subjectId     Int       @map("subject_id")
+  examName      String    @map("exam_name")
+  description   String?   @db.Text
+  duration      Int
+  totalMarks    Int?      @map("total_marks")
+  passingMarks  Int?      @map("passing_marks")
+  scheduleTime  DateTime? @map("schedule_time")
+  isActive      Boolean   @default(false) @map("is_active")
+  retakeAllowed Boolean   @default(false) @map("retake_allowed")
+  createdBy     Int       @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  course        Course        @relation(fields: [courseId], references: [id])
+  subject       Subject       @relation(fields: [subjectId], references: [id])
+  creator       User          @relation("ExamCreator", fields: [createdBy], references: [id])
+  examQuestions ExamQuestion[]
+  examAttempts  ExamAttempt[]
+
+  @@map("exams")
+}
+
+model ExamQuestion {
+  id         Int @id @default(autoincrement())
+  examId     Int @map("exam_id")
+  questionId Int @map("question_id")
+  marks      Int @default(1)
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([examId, questionId])
+  @@map("exam_questions")
+}
+
+// ─── Attempts & Results ───────────────────────────────────────────────────────
+
+model ExamAttempt {
+  id           Int       @id @default(autoincrement())
+  examId       Int       @map("exam_id")
+  studentId    Int?      @map("student_id")
+  guestName    String?   @map("guest_name")
+  guestCollege String?   @map("guest_college")
+  guestToken   String?   @unique @map("guest_token")
+  score        Float?    @default(0)
+  startedAt    DateTime  @default(now()) @map("started_at")
+  submittedAt  DateTime? @map("submitted_at")
+  isCompleted  Boolean   @default(false) @map("is_completed")
+
+  exam    Exam         @relation(fields: [examId], references: [id])
+  student User?        @relation(fields: [studentId], references: [id])
+  answers ExamAnswer[]
+
+  @@map("exam_attempts")
+}
+
+model ExamAnswer {
+  id             Int     @id @default(autoincrement())
+  attemptId      Int     @map("attempt_id")
+  questionId     Int     @map("question_id")
+  selectedAnswer String? @map("selected_answer")
+  isCorrect      Boolean @default(false) @map("is_correct")
+  marksEarned    Float   @default(0) @map("marks_earned")
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id])
+
+  @@map("exam_answers")
+}
