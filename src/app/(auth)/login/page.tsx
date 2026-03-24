@@ -73,11 +73,6 @@ export default function LoginPage() {
             style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"0.5rem", width:"100%", height:"2.75rem", borderRadius:"0.625rem", border:"none", background:loading?"#172d56":"#4f8ef7", color:"#fff", fontWeight:700, fontSize:"0.9rem", cursor:loading?"not-allowed":"pointer", marginTop:"0.25rem" }}>
             {loading ? "Signing in..." : <><LogIn size={16}/> Sign In</>}
           </button>
-
-          <p style={{ textAlign:"center", fontSize:"0.8rem", color:"#3e4f6a", margin:0 }}>
-            New student?{" "}
-            <Link href="/register" style={{ color:"#4f8ef7", textDecoration:"none", fontWeight:600 }}>Create account</Link>
-          </p>
         </div>
       </div>
     </div>
