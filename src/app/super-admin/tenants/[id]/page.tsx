@@ -3,7 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2, X, Users, GraduationCap, ToggleLeft, ToggleRight, UserPlus } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, X, Users, GraduationCap, ToggleLeft, ToggleRight, UserPlus, UserMinus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 function Modal({ title, onClose, onSubmit, loading, children }: any) {
@@ -26,6 +26,38 @@ function Modal({ title, onClose, onSubmit, loading, children }: any) {
   );
 }
 
+// Confirmation modal for destructive user actions
+function UserActionModal({ user, onClose, onDetach, onDelete, loading }: any) {
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.55)" }} onClick={onClose}>
+      <div style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--radius)",padding:"1.5rem",width:"100%",maxWidth:"400px" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"1rem" }}>
+          <h2 style={{ fontSize:"1rem",fontWeight:700,color:"var(--text)",margin:0 }}>Remove user</h2>
+          <button onClick={onClose} style={{ background:"none",border:"none",cursor:"pointer",color:"var(--text3)" }}><X size={18}/></button>
+        </div>
+        <p style={{ fontSize:"0.82rem",color:"var(--text2)",marginBottom:"1.25rem" }}>
+          What would you like to do with <strong style={{ color:"var(--text)" }}>{user?.username}</strong>?
+        </p>
+        <div style={{ display:"flex",flexDirection:"column",gap:"0.5rem" }}>
+          <button onClick={onDetach} disabled={loading}
+            style={{ padding:"0.625rem 1rem",borderRadius:"0.5rem",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",cursor:"pointer",fontSize:"0.82rem",textAlign:"left",display:"flex",flexDirection:"column",gap:"0.2rem" }}>
+            <span style={{ fontWeight:600,color:"var(--text)" }}>Remove from tenant</span>
+            <span style={{ fontSize:"0.72rem" }}>Keeps the account — user can be re-added later</span>
+          </button>
+          <button onClick={onDelete} disabled={loading}
+            style={{ padding:"0.625rem 1rem",borderRadius:"0.5rem",border:"1px solid var(--red)",background:"var(--red-bg)",color:"var(--red)",cursor:"pointer",fontSize:"0.82rem",textAlign:"left",display:"flex",flexDirection:"column",gap:"0.2rem" }}>
+            <span style={{ fontWeight:600 }}>Permanently delete user</span>
+            <span style={{ fontSize:"0.72rem" }}>Deletes account, all attempts, and enrollments forever</span>
+          </button>
+        </div>
+        <button onClick={onClose} style={{ marginTop:"1rem",width:"100%",padding:"0.5rem",borderRadius:"0.5rem",border:"1px solid var(--border)",background:"none",color:"var(--text3)",cursor:"pointer",fontSize:"0.82rem" }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const inp: React.CSSProperties = { width:"100%",height:"2.25rem",padding:"0 0.75rem",borderRadius:"0.5rem",border:"1.5px solid var(--border)",background:"var(--input-bg)",color:"var(--text)",fontSize:"0.82rem",outline:"none",boxSizing:"border-box" };
 const sel: React.CSSProperties = { ...inp, appearance:"none" as any };
 const lbl: React.CSSProperties = { fontSize:"0.72rem",fontWeight:600,color:"var(--text2)" };
@@ -38,11 +70,12 @@ export default function TenantDetailPage() {
   const router    = useRouter();
   const { toast } = useToast();
 
-  const [showCourse,  setShowCourse]  = useState(false);
-  const [showUser,    setShowUser]    = useState(false);
-  const [courseName,  setCourseName]  = useState("");
-  const [newUser,     setNewUser]     = useState({ username:"", email:"", password:"", role:"student" });
-  const [activeTab,   setActiveTab]   = useState<"courses"|"users">("users");
+  const [showCourse,    setShowCourse]    = useState(false);
+  const [showUser,      setShowUser]      = useState(false);
+  const [userAction,    setUserAction]    = useState<any>(null); // user object for action modal
+  const [courseName,    setCourseName]    = useState("");
+  const [newUser,       setNewUser]       = useState({ username:"", email:"", password:"", role:"student" });
+  const [activeTab,     setActiveTab]     = useState<"courses"|"users">("users");
 
   const { data:tenant, isLoading, refetch } = useQuery({
     queryKey: ["sa-tenant", id],
@@ -79,8 +112,12 @@ export default function TenantDetailPage() {
   });
 
   const delCourse = useMutation({
-    mutationFn: async (cid:number) => { await fetch(`/api/courses/${cid}`, { method:"DELETE" }); },
+    mutationFn: async (cid:number) => {
+      const r = await fetch(`/api/courses/${cid}`, { method:"DELETE" });
+      if (!r.ok) { const d=await r.json(); throw new Error(d.error||"Failed"); }
+    },
     onSuccess: () => { toast({ title:"Course deleted" }); refetchCourses(); },
+    onError: (e:any) => toast({ title:"Error", description:e.message, variant:"destructive" }),
   });
 
   const createUser = useMutation({
@@ -100,23 +137,48 @@ export default function TenantDetailPage() {
     onError: (e:any) => toast({ title:"Error", description:e.message, variant:"destructive" }),
   });
 
-  const removeUser = useMutation({
+  // Detach: removes from tenant but keeps account
+  const detachUser = useMutation({
     mutationFn: async (uid:number) => {
-      const r = await fetch(`/api/super-admin/tenants/${id}/users/${uid}`, { method:"DELETE" });
+      const r = await fetch(`/api/super-admin/tenants/${id}/users/${uid}?mode=detach`, { method:"DELETE" });
       if (!r.ok) { const d=await r.json(); throw new Error(d.error||"Failed"); }
     },
-    onSuccess: () => { toast({ title:"User removed from tenant" }); refetchUsers(); },
+    onSuccess: () => {
+      toast({ title:"User removed from tenant" });
+      setUserAction(null);
+      refetchUsers();
+    },
+    onError: (e:any) => toast({ title:"Error", description:e.message, variant:"destructive" }),
+  });
+
+  // Hard delete: permanently removes the user account
+  const deleteUser = useMutation({
+    mutationFn: async (uid:number) => {
+      const r = await fetch(`/api/super-admin/tenants/${id}/users/${uid}?mode=delete`, { method:"DELETE" });
+      if (!r.ok) { const d=await r.json(); throw new Error(d.error||"Failed"); }
+    },
+    onSuccess: () => {
+      toast({ title:"User permanently deleted" });
+      setUserAction(null);
+      refetchUsers();
+    },
     onError: (e:any) => toast({ title:"Error", description:e.message, variant:"destructive" }),
   });
 
   const toggleTenant = useMutation({
-    mutationFn: async (isActive:boolean) => { await fetch(`/api/tenants/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ isActive }) }); },
+    mutationFn: async (isActive:boolean) => {
+      await fetch(`/api/tenants/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ isActive }) });
+    },
     onSuccess: () => refetch(),
   });
 
   const delTenant = useMutation({
-    mutationFn: async () => { await fetch(`/api/tenants/${id}`, { method:"DELETE" }); },
+    mutationFn: async () => {
+      const r = await fetch(`/api/tenants/${id}`, { method:"DELETE" });
+      if (!r.ok) throw new Error("Failed");
+    },
     onSuccess: () => { toast({ title:"Tenant deleted" }); router.push("/super-admin/tenants"); },
+    onError: (e:any) => toast({ title:"Error", description:e.message, variant:"destructive" }),
   });
 
   if (isLoading) return (
@@ -129,6 +191,7 @@ export default function TenantDetailPage() {
 
   const tenantUsers   = users   ?? [];
   const tenantCourses = courses ?? [];
+  const actionLoading = detachUser.isPending || deleteUser.isPending;
 
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:"1.75rem" }}>
@@ -136,7 +199,8 @@ export default function TenantDetailPage() {
       {/* Create Course Modal */}
       {showCourse && (
         <Modal title="New Course" onClose={()=>setShowCourse(false)} onSubmit={()=>courseName.trim()&&createCourse.mutate()} loading={createCourse.isPending}>
-          <div><label style={lbl}>Course Name *</label>
+          <div>
+            <label style={lbl}>Course Name *</label>
             <input value={courseName} onChange={e=>setCourseName(e.target.value)} placeholder="e.g. SAT Prep 2025" style={inp}
               onFocus={e=>(e.target.style.borderColor="var(--accent)")} onBlur={e=>(e.target.style.borderColor="var(--border)")}/>
           </div>
@@ -168,6 +232,20 @@ export default function TenantDetailPage() {
         </Modal>
       )}
 
+      {/* User action modal (detach vs delete) */}
+      {userAction && (
+        <UserActionModal
+          user={userAction}
+          loading={actionLoading}
+          onClose={()=>setUserAction(null)}
+          onDetach={()=>detachUser.mutate(userAction.id)}
+          onDelete={()=>{
+            if (confirm(`Permanently delete "${userAction.username}"? This cannot be undone.`))
+              deleteUser.mutate(userAction.id);
+          }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:"1rem" }}>
         <div style={{ display:"flex",alignItems:"center",gap:"0.875rem" }}>
@@ -184,7 +262,7 @@ export default function TenantDetailPage() {
             style={{ display:"flex",alignItems:"center",gap:"0.4rem",padding:"0.45rem 0.875rem",borderRadius:"0.5rem",background:tenant.isActive?"var(--green-bg)":"var(--surface2)",border:`1px solid ${tenant.isActive?"var(--green)":"var(--border)"}`,color:tenant.isActive?"var(--green)":"var(--text2)",cursor:"pointer",fontSize:"0.78rem",fontWeight:600 }}>
             {tenant.isActive?<><ToggleRight size={13}/> Active</>:<><ToggleLeft size={13}/> Inactive</>}
           </button>
-          <button onClick={()=>{if(confirm(`Delete "${tenant.name}"? All data will be lost.`))delTenant.mutate();}}
+          <button onClick={()=>{if(confirm(`Delete "${tenant.name}"? All data will be permanently lost.`))delTenant.mutate();}}
             style={{ display:"flex",alignItems:"center",gap:"0.4rem",padding:"0.45rem 0.875rem",borderRadius:"0.5rem",background:"var(--red-bg)",border:"1px solid var(--red)",color:"var(--red)",cursor:"pointer",fontSize:"0.78rem",fontWeight:600 }}>
             <Trash2 size={13}/> Delete Tenant
           </button>
@@ -213,8 +291,8 @@ export default function TenantDetailPage() {
       {/* Tabs */}
       <div style={{ display:"flex",gap:"0",borderBottom:"1px solid var(--border)" }}>
         {[
-          { key:"users",   label:`Users (${tenantUsers.length})`          },
-          { key:"courses", label:`Courses (${tenantCourses.length})`      },
+          { key:"users",   label:`Users (${tenantUsers.length})`     },
+          { key:"courses", label:`Courses (${tenantCourses.length})` },
         ].map(({ key, label }) => (
           <button key={key} onClick={()=>setActiveTab(key as any)}
             style={{ padding:"0.625rem 1.25rem",background:"none",border:"none",borderBottom:`2px solid ${activeTab===key?"var(--accent)":"transparent"}`,color:activeTab===key?"var(--accent)":"var(--text2)",cursor:"pointer",fontSize:"0.82rem",fontWeight:activeTab===key?700:400,transition:"all 0.15s" }}>
@@ -247,7 +325,9 @@ export default function TenantDetailPage() {
                 </tr></thead>
                 <tbody>
                   {tenantUsers.map((u:any)=>(
-                    <tr key={u.id} style={{ borderBottom:"1px solid var(--border)" }}>
+                    <tr key={u.id} style={{ borderBottom:"1px solid var(--border)" }}
+                      onMouseEnter={e=>(e.currentTarget.style.background="var(--surface2)")}
+                      onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
                       <td style={{ padding:"0.75rem 1.1rem",fontWeight:600,color:"var(--text)" }}>{u.username}</td>
                       <td style={{ padding:"0.75rem 1.1rem",color:"var(--text2)" }}>{u.email}</td>
                       <td style={{ padding:"0.75rem 1.1rem" }}>
@@ -257,10 +337,13 @@ export default function TenantDetailPage() {
                       </td>
                       <td style={{ padding:"0.75rem 1.1rem",color:"var(--text3)" }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                       <td style={{ padding:"0.75rem 1.1rem" }}>
-                        <button onClick={()=>{if(confirm(`Remove "${u.username}" from this tenant?`))removeUser.mutate(u.id);}}
-                          style={{ background:"none",border:"none",cursor:"pointer",color:"var(--text3)",display:"flex",padding:"0.2rem",borderRadius:"0.25rem" }}
-                          onMouseEnter={e=>(e.currentTarget.style.color="var(--red)")} onMouseLeave={e=>(e.currentTarget.style.color="var(--text3)")}>
-                          <Trash2 size={14}/>
+                        <button
+                          onClick={()=>setUserAction(u)}
+                          title="Remove or delete user"
+                          style={{ display:"flex",alignItems:"center",gap:"0.3rem",padding:"0.3rem 0.625rem",borderRadius:"0.375rem",border:"1px solid var(--border)",background:"none",color:"var(--text3)",cursor:"pointer",fontSize:"0.72rem",fontWeight:600,transition:"all 0.12s" }}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--red)";e.currentTarget.style.color="var(--red)";e.currentTarget.style.background="var(--red-bg)";}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text3)";e.currentTarget.style.background="none";}}>
+                          <UserMinus size={13}/> Remove
                         </button>
                       </td>
                     </tr>
