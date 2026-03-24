@@ -10,31 +10,36 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const search       = searchParams.get("search") ?? "";
-    const scope        = searchParams.get("scope"); // "all" = super admin view
     const isSuperAdmin = session.user.role === "super_admin";
     const tenantId     = session.user.tenantId ? parseInt(session.user.tenantId) : null;
 
-    // Super admin with scope=all sees everything
-    // Tenants see only tags used by their questions
-    // On create question forms: show tenant tags + allow creating new ones
-    let tagIds: number[] | undefined = undefined;
+    const where: Record<string, any> = {};
 
-    if (!isSuperAdmin && tenantId && scope !== "all") {
-      const questionTags = await prisma.questionTag.findMany({
-        where: { question: { creator: { tenantId } } },
-        select: { tagId: true },
-        distinct: ["tagId"],
-      });
-      tagIds = questionTags.map(qt => qt.tagId);
+    if (!isSuperAdmin) {
+      // Show only tags belonging to this tenant OR global tags
+      where.OR = [
+        { tenantId: tenantId },
+        { tenantId: null },
+      ];
     }
 
-    const where: any = {};
-    if (tagIds !== undefined) where.id = { in: tagIds.length > 0 ? tagIds : [-1] };
-    if (search) where.name = { contains: search, mode: "insensitive" };
+    if (search) {
+      const nameFilter = { name: { contains: search, mode: "insensitive" as const } };
+      if (where.OR) {
+        // Combine tenant scope AND search
+        where.AND = [{ OR: where.OR }, nameFilter];
+        delete where.OR;
+      } else {
+        where.name = { contains: search, mode: "insensitive" as const };
+      }
+    }
 
     const tags = await prisma.tag.findMany({
       where,
-      include: { _count: { select: { questions: true } } },
+      select: {
+        id: true, name: true, tenantId: true,
+        _count: { select: { questions: true } },
+      },
       orderBy: { name: "asc" },
       take: 50,
     });
@@ -49,18 +54,31 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session?.user || !["admin", "super_admin", "question_setter"].includes(session.user.role))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { name } = await req.json();
-    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
 
-    const tag = await prisma.tag.upsert({
-      where:  { name: name.toLowerCase().trim() },
-      update: {},
-      create: { name: name.toLowerCase().trim() },
+    const tenantId = session.user.role === "super_admin"
+      ? null
+      : session.user.tenantId
+        ? parseInt(session.user.tenantId)
+        : null;
+
+    const existing = await prisma.tag.findFirst({
+      where: { name: name.trim().toLowerCase(), tenantId },
+    });
+    if (existing) return NextResponse.json({ error: "Tag already exists" }, { status: 400 });
+
+    const tag = await prisma.tag.create({
+      data: { name: name.trim().toLowerCase(), tenantId },
     });
     return NextResponse.json(tag, { status: 201 });
-  } catch {
+  } catch (error: any) {
+    if (error?.code === "P2002")
+      return NextResponse.json({ error: "Tag already exists" }, { status: 400 });
+    console.error("POST /api/tags error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -27,7 +27,7 @@ enum QuestionStatus {
   published
 }
 
-// ─── Tenant (Coaching Center) ─────────────────────────────────────────────────
+// ─── Tenant ───────────────────────────────────────────────────────────────────
 
 model Tenant {
   id        Int      @id @default(autoincrement())
@@ -40,6 +40,8 @@ model Tenant {
   users    User[]
   courses  Course[]
   exams    Exam[]
+  subjects Subject[]
+  tags     Tag[]
 
   @@map("tenants")
 }
@@ -77,15 +79,35 @@ model CourseEnrollment {
   @@map("course_enrollments")
 }
 
-// ─── Tag ──────────────────────────────────────────────────────────────────────
+// ─── Subject (per tenant) ─────────────────────────────────────────────────────
+
+model Subject {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int?     @map("tenant_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  questions Question[]
+  exams     Exam[]
+
+  @@unique([tenantId, name])
+  @@map("subjects")
+}
+
+// ─── Tag (per tenant) ─────────────────────────────────────────────────────────
 
 model Tag {
   id        Int      @id @default(autoincrement())
-  name      String   @unique
+  tenantId  Int?     @map("tenant_id")
+  name      String
   createdAt DateTime @default(now()) @map("created_at")
 
+  tenant    Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   questions QuestionTag[]
 
+  @@unique([tenantId, name])
   @@map("tags")
 }
 
@@ -147,21 +169,7 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
-// ─── Subject (Master Library grouping — tenant-scoped) ────────────────────────
-
-model Subject {
-  id          Int      @id @default(autoincrement())
-  name        String
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  questions Question[]
-  exams     Exam[]
-
-  @@map("subjects")
-}
-
-// ─── Questions (Master Library) ───────────────────────────────────────────────
+// ─── Questions ────────────────────────────────────────────────────────────────
 
 model Question {
   id        Int            @id @default(autoincrement())
