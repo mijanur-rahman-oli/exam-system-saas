@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { CheckCircle, XCircle, ArrowLeft, Trophy, Target, Clock } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, Trophy, Target, Clock, ImageIcon } from "lucide-react";
 
 // ─── KaTeX renderer ───────────────────────────────────────────────────────────
 function KaTeXDisplay({ text }: { text: string }) {
@@ -25,6 +25,27 @@ function KaTeXDisplay({ text }: { text: string }) {
     });
   }, [text]);
   return <span ref={ref} style={{ fontSize: "inherit", lineHeight: "inherit", color: "inherit" }} />;
+}
+
+// ─── Image component with consistent styling ─────────────────────────────────
+function QuestionImageBlock({ src, maxHeight = 160 }: { src: string; maxHeight?: number }) {
+  return (
+    <div style={{ marginTop: "0.5rem" }}>
+      <img 
+        src={src} 
+        alt="Solution" 
+        style={{ 
+          maxHeight: `${maxHeight}px`, 
+          maxWidth: "100%", 
+          objectFit: "contain", 
+          borderRadius: "0.5rem", 
+          border: "1px solid var(--border)",
+          display: "block",
+          background: "var(--surface)"
+        }} 
+      />
+    </div>
+  );
 }
 
 export default function ResultDetailPage() {
@@ -155,6 +176,8 @@ export default function ResultDetailPage() {
               ].filter((o) => o.text);
 
               const borderColor = ans.isCorrect ? "var(--green)" : ans.selectedAnswer ? "var(--red)" : "var(--border)";
+              const hasExplanation = ans.question?.explanation && ans.question.explanation.trim();
+              const hasSolutionImage = ans.question?.solutionImage && ans.question.solutionImage.trim();
 
               return (
                 <div key={ans.id} style={{ background: "var(--surface)", borderRadius: "var(--radius)", border: `1px solid ${borderColor}`, padding: "1.25rem", boxShadow: "var(--shadow)" }}>
@@ -164,7 +187,7 @@ export default function ResultDetailPage() {
                     <div style={{ fontSize: "0.88rem", color: "var(--text)", lineHeight: 1.6, flex: 1 }}>
                       <KaTeXDisplay text={ans.question?.question ?? ""} />
                       {ans.question?.questionImage && (
-                        <img src={ans.question.questionImage} alt="question" style={{ marginTop: "0.5rem", maxHeight: "180px", maxWidth: "100%", objectFit: "contain", borderRadius: "0.5rem", border: "1px solid var(--border)", display: "block" }} />
+                        <QuestionImageBlock src={ans.question.questionImage} maxHeight={180} />
                       )}
                     </div>
                     <div style={{ flexShrink: 0 }}>
@@ -189,7 +212,7 @@ export default function ResultDetailPage() {
                           <span style={{ fontWeight: 700, flexShrink: 0 }}>{opt.key}.</span>
                           <div style={{ flex: 1 }}>
                             <KaTeXDisplay text={opt.text ?? ""} />
-                            {opt.img && <img src={opt.img} alt="" style={{ marginTop: "0.4rem", maxHeight: "120px", maxWidth: "100%", objectFit: "contain", borderRadius: "0.375rem", border: "1px solid var(--border)", display: "block" }} />}
+                            {opt.img && <QuestionImageBlock src={opt.img} maxHeight={120} />}
                           </div>
                           {isCorrectOpt && <span style={{ fontSize: "0.68rem", fontWeight: 700, flexShrink: 0 }}>✓ Correct</span>}
                           {isSelected && !isCorrectOpt && <span style={{ fontSize: "0.68rem", fontWeight: 700, flexShrink: 0 }}>✗ Your answer</span>}
@@ -198,10 +221,34 @@ export default function ResultDetailPage() {
                     })}
                   </div>
 
-                  {/* Explanation */}
-                  {ans.question?.explanation && (
-                    <div style={{ marginTop: "0.75rem", padding: "0.625rem 0.875rem", borderRadius: "0.4rem", background: "var(--amber-bg)", border: "1px solid var(--amber)", fontSize: "0.78rem", color: "var(--amber)", lineHeight: 1.5 }}>
-                      <span>💡 </span><KaTeXDisplay text={ans.question.explanation} />
+                  {/* Explanation - Now with both text and image support */}
+                  {(hasExplanation || hasSolutionImage) && (
+                    <div style={{
+                      marginTop: "0.875rem",
+                      padding: "0.75rem 0.875rem",
+                      borderRadius: "0.5rem",
+                      background: "var(--amber-bg)",
+                      border: "1px solid var(--amber)",
+                    }}>
+                      <div style={{ 
+                        fontSize: "0.7rem", 
+                        fontWeight: 700, 
+                        color: "var(--amber)", 
+                        marginBottom: hasExplanation ? "0.3rem" : 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.3rem"
+                      }}>
+                        <ImageIcon size={12} /> 💡 Explanation
+                      </div>
+                      {hasExplanation && (
+                        <div style={{ fontSize: "0.8rem", color: "var(--text)", lineHeight: 1.6 }}>
+                          <KaTeXDisplay text={ans.question.explanation} />
+                        </div>
+                      )}
+                      {hasSolutionImage && (
+                        <QuestionImageBlock src={ans.question.solutionImage} maxHeight={160} />
+                      )}
                     </div>
                   )}
                 </div>

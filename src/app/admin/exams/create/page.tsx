@@ -26,7 +26,7 @@ export default function AdminCreateExamPage() {
   const { data: subjects } = useQuery({ queryKey:["subjects"], queryFn:() => fetch("/api/subjects").then(r=>r.json()) });
   const { data: courses }  = useQuery({ queryKey:["courses"],  queryFn:() => fetch("/api/courses").then(r=>r.json()) });
 
-  // Fetch all published questions by default with filters
+  // Fetch all published questions with filters
   useEffect(() => {
     const fetchQuestions = async () => {
       setSearching(true);
@@ -37,7 +37,7 @@ export default function AdminCreateExamPage() {
         if (subjectFilter !== "all") params.set("subjectId", subjectFilter);
         if (difficultyFilter !== "all") params.set("difficulty", difficultyFilter);
         params.set("status", "published");
-        params.set("limit", "50");
+        params.set("limit", "100");
         
         const res = await fetch(`/api/questions?${params}`);
         const data = await res.json();
@@ -50,7 +50,6 @@ export default function AdminCreateExamPage() {
       }
     };
 
-    // Debounce search input
     const timer = setTimeout(() => {
       fetchQuestions();
     }, 350);
@@ -65,18 +64,22 @@ export default function AdminCreateExamPage() {
       marks: q.marks ?? 1, 
       question: q.question, 
       difficulty: q.difficulty, 
-      tags: q.tags?.map((t:any)=>t.tag.name)??[] 
+      tags: q.tags?.map((t:any)=>t.tag?.name)??[] 
     }]);
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!form.subjectId || !form.courseId) {
+        throw new Error("Please select both subject and course");
+      }
       const totalMarks = questions.reduce((s,q) => s + q.marks, 0);
       const r = await fetch("/api/exams", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ ...form, totalMarks, questions: questions.map(q=>({ questionId: q.questionId, marks: q.marks })) }),
       });
-      const d = await r.json(); if (!r.ok) throw new Error(d.error||"Failed");
+      const d = await r.json(); 
+      if (!r.ok) throw new Error(d.error||"Failed");
       return d;
     },
     onSuccess: () => { toast({ title:"Exam created!" }); router.push("/admin/exams"); },
@@ -99,12 +102,12 @@ export default function AdminCreateExamPage() {
         </div>
         <button 
           onClick={() => saveMutation.mutate()} 
-          disabled={saveMutation.isPending || !form.examName || !form.subjectId || !form.courseId || !form.duration}
+          disabled={saveMutation.isPending || !form.examName || !form.subjectId || !form.courseId || !form.duration || questions.length === 0}
           style={{ 
             display:"flex", alignItems:"center", gap:"0.4rem", padding:"0.55rem 1.25rem", 
             borderRadius:"0.5rem", background:"var(--accent)", border:"none", color:"#fff", 
             fontWeight:700, fontSize:"0.85rem", cursor:"pointer", 
-            opacity: saveMutation.isPending || !form.examName || !form.subjectId || !form.courseId || !form.duration ? 0.7 : 1 
+            opacity: saveMutation.isPending || !form.examName || !form.subjectId || !form.courseId || !form.duration || questions.length === 0 ? 0.7 : 1 
           }}>
           <Save size={15} /> {saveMutation.isPending ? "Saving..." : "Create Exam"}
         </button>
@@ -115,7 +118,7 @@ export default function AdminCreateExamPage() {
         <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"var(--radius)", overflow:"hidden" }}>
           <div style={{ padding:"0.875rem 1.25rem", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between" }}>
             <span style={{ fontSize:"0.72rem", fontWeight:700, color:"var(--text2)", textTransform:"uppercase", letterSpacing:"0.07em" }}>
-              Questions ({questions.length}) · {totalMarks} marks total
+              Available Questions ({results.length}) · Selected ({questions.length}) · {totalMarks} marks total
             </span>
           </div>
           
@@ -170,7 +173,14 @@ export default function AdminCreateExamPage() {
               </div>
             ) : results.length === 0 ? (
               <div style={{ padding:"2.5rem", textAlign:"center", color:"var(--text3)", fontSize:"0.82rem" }}>
-                No questions found. Try adjusting your filters.
+                No questions found. 
+                {!search && !tagFilter && subjectFilter === "all" && difficultyFilter === "all" ? (
+                  <div style={{ marginTop:"0.5rem" }}>
+                    <Link href="/admin/questions/create" style={{ color:"var(--accent)" }}>
+                      Create your first question
+                    </Link>
+                  </div>
+                ) : " Try adjusting your filters."}
               </div>
             ) : (
               results.map((q:any) => {
@@ -188,7 +198,7 @@ export default function AdminCreateExamPage() {
                     }}
                     onMouseEnter={e => { if (!added) e.currentTarget.style.background="var(--surface2)"; }}
                     onMouseLeave={e => { e.currentTarget.style.background="transparent"; }}>
-                    <p style={{ fontSize:"0.8rem", color:"var(--text)", margin:"0 0 0.3rem" }}>
+                    <p style={{ fontSize:"0.8rem", color:"var(--text)", margin:"0 0 0.3rem", lineHeight:1.5 }}>
                       {q.question}
                     </p>
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", alignItems:"center" }}>
@@ -204,8 +214,8 @@ export default function AdminCreateExamPage() {
                         </span>
                       )}
                       {q.tags?.map((t:any) => (
-                        <span key={t.tag.name} style={{ fontSize:"0.65rem", color:"var(--accent)", background:"var(--accent-bg)", padding:"0.1rem 0.4rem", borderRadius:"999px" }}>
-                          #{t.tag.name}
+                        <span key={t.tag?.name} style={{ fontSize:"0.65rem", color:"var(--accent)", background:"var(--accent-bg)", padding:"0.1rem 0.4rem", borderRadius:"999px" }}>
+                          #{t.tag?.name}
                         </span>
                       ))}
                       {added && (
@@ -379,10 +389,16 @@ export default function AdminCreateExamPage() {
               </div>
             </div>
           )}
+          
+          {questions.length === 0 && (
+            <div style={{ marginTop:"0.5rem", padding:"0.75rem", background:"var(--amber-bg)", borderRadius:"0.5rem", fontSize:"0.7rem", color:"var(--amber)" }}>
+              ⚠️ Please select at least one question to create an exam.
+            </div>
+          )}
         </div>
       </div>
       
-      <style jsx>{`
+      <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
