@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
-import { Trophy, Clock, Medal, Users, ArrowLeft, Crown, Download } from "lucide-react";
+import { Trophy, Clock, Medal, Users, ArrowLeft, Crown, Download, BarChart, TrendingUp, Award, Target } from "lucide-react";
 import Link from "next/link";
 
 type Entry = {
@@ -65,6 +65,37 @@ export default function LeaderboardPage() {
   // Current student's rank
   const myEntry = leaderboard.find((e) => e.isCurrentUser);
 
+  // Calculate statistics
+  const getStatistics = () => {
+    if (!leaderboard.length) return null;
+    
+    const scores = leaderboard.map(e => e.score);
+    const percentages = leaderboard.map(e => e.percentage);
+    const totalMarks = leaderboard[0]?.totalMarks || 0;
+    
+    const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const highestScore = Math.max(...scores);
+    const lowestScore = Math.min(...scores);
+    const avgPercentage = percentages.reduce((a, b) => a + b, 0) / percentages.length;
+    const passCount = leaderboard.filter(e => e.percentage >= 50).length;
+    const failCount = leaderboard.length - passCount;
+    const passRate = (passCount / leaderboard.length) * 100;
+    
+    return {
+      avgScore: avgScore.toFixed(1),
+      highestScore,
+      lowestScore,
+      avgPercentage: avgPercentage.toFixed(1),
+      passCount,
+      failCount,
+      passRate: passRate.toFixed(1),
+      totalParticipants: leaderboard.length,
+      totalMarks
+    };
+  };
+
+  const stats = getStatistics();
+
   if (isLoading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", flexDirection: "column", gap: "1rem" }}>
       <div style={{ width: "2.5rem", height: "2.5rem", border: "3px solid var(--border)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -78,7 +109,6 @@ export default function LeaderboardPage() {
       <p style={{ color: "var(--red)" }}>Failed to load leaderboard.</p>
     </div>
   );
-
 
   const exportCSV = () => {
     if (!leaderboard.length) return;
@@ -141,6 +171,75 @@ export default function LeaderboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Statistics Cards - Only visible to admin */}
+      {isAdmin && stats && leaderboard.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+          {/* Average Score Card */}
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <BarChart size={14} color="var(--accent)" />
+              </div>
+              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Average Score</span>
+            </div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text)" }}>
+              {stats.avgScore} / {stats.totalMarks}
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+              {stats.avgPercentage}% average
+            </div>
+          </div>
+
+          {/* Highest Score Card */}
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--green-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <TrendingUp size={14} color="var(--green)" />
+              </div>
+              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Highest Score</span>
+            </div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--green)" }}>
+              {stats.highestScore} / {stats.totalMarks}
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+              Top performer
+            </div>
+          </div>
+
+          {/* Pass Rate Card */}
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--amber-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Award size={14} color="var(--amber)" />
+              </div>
+              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Pass Rate</span>
+            </div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--amber)" }}>
+              {stats.passRate}%
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+              {stats.passCount} passed / {stats.failCount} failed
+            </div>
+          </div>
+
+          {/* Total Participants Card */}
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Target size={14} color="var(--accent)" />
+              </div>
+              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Participants</span>
+            </div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text)" }}>
+              {stats.totalParticipants}
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+              Total attempts
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* My rank banner (students only) */}
       {myEntry && (

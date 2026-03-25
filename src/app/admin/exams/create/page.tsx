@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Trash2, Search, Save, Tag, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { KaTeXDisplay } from "@/components/katex/KaTeXDisplay";
 
 const inp: React.CSSProperties = { width:"100%", height:"2.25rem", padding:"0 0.75rem", borderRadius:"0.5rem", border:"1.5px solid var(--border)", background:"var(--input-bg)", color:"var(--text)", fontSize:"0.82rem", outline:"none", boxSizing:"border-box" };
 const sel: React.CSSProperties = { ...inp, appearance:"none" as any };
@@ -26,7 +27,6 @@ export default function AdminCreateExamPage() {
   const { data: subjects } = useQuery({ queryKey:["subjects"], queryFn:() => fetch("/api/subjects").then(r=>r.json()) });
   const { data: courses }  = useQuery({ queryKey:["courses"],  queryFn:() => fetch("/api/courses").then(r=>r.json()) });
 
-  // Fetch all published questions with filters
   useEffect(() => {
     const fetchQuestions = async () => {
       setSearching(true);
@@ -91,6 +91,8 @@ export default function AdminCreateExamPage() {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:"1.5rem" }}>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+      
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:"0.875rem" }}>
           <Link href="/admin/exams">
@@ -198,9 +200,9 @@ export default function AdminCreateExamPage() {
                     }}
                     onMouseEnter={e => { if (!added) e.currentTarget.style.background="var(--surface2)"; }}
                     onMouseLeave={e => { e.currentTarget.style.background="transparent"; }}>
-                    <p style={{ fontSize:"0.8rem", color:"var(--text)", margin:"0 0 0.3rem", lineHeight:1.5 }}>
-                      {q.question}
-                    </p>
+                    <div style={{ fontSize:"0.8rem", color:"var(--text)", margin:"0 0 0.3rem", lineHeight:1.5 }}>
+                      <KaTeXDisplay text={q.question} />
+                    </div>
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", alignItems:"center" }}>
                       <span style={{ fontSize:"0.65rem", color:diffColor[q.difficulty] ?? "var(--text3)" }}>
                         {q.difficulty}
@@ -364,9 +366,9 @@ export default function AdminCreateExamPage() {
                   <div key={q.questionId} style={{ padding:"0.5rem 0", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:"0.5rem" }}>
                     <span style={{ fontSize:"0.68rem", fontWeight:700, color:"var(--text3)", flexShrink:0 }}>Q{idx+1}</span>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontSize:"0.75rem", color:"var(--text)", margin:"0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {q.question}
-                      </p>
+                      <div style={{ fontSize:"0.75rem", color:"var(--text)", margin:"0" }}>
+                        <KaTeXDisplay text={q.question} inline />
+                      </div>
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:"0.25rem", flexShrink:0 }}>
                       <input 
